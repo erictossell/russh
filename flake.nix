@@ -14,7 +14,15 @@
       {
         packages.russh = pkgs.stdenv.mkDerivation {
           name = "russh";
-          src = ./.;
+          src = pkgs.lib.cleanSourceWith {
+            src = ./.; # Points to your project directory
+            filter = name: type: 
+              let
+                baseName = baseNameOf name;
+              in
+                !builtins.elem baseName [ "config.json" ]; # Exclude config.json
+          };         
+         
           cargoSha256 = "0000000000000000000000000000000000000000000000000000";
           buildInputs = [ pkgs.rustc pkgs.cargo pkgs.gcc ];
           buildPhase = ''
