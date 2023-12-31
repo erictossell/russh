@@ -14,7 +14,7 @@
       {
         packages.russh = pkgs.stdenv.mkDerivation {
           name = "russh";
-          src = self;
+          src = ./.;
           cargoSha256 = "0000000000000000000000000000000000000000000000000000";
           buildInputs = [ pkgs.rustc pkgs.cargo pkgs.gcc ];
           buildPhase = ''
