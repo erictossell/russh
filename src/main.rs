@@ -23,10 +23,12 @@ enum AppError {
 type Result<T> = std::result::Result<T, AppError>;
 
 fn main() {
+
     if !io::stdout().is_terminal() {
         writeln!(io::stderr(), "This application must be run in a terminal.").unwrap();
         std::process::exit(1);
     }
+
     let matches = App::new("ruSSH")
         .version("0.1.0")
         .author("Eric Tossell")
@@ -48,17 +50,37 @@ fn main() {
     let config_path = find_config_in_cwd()
         .or_else(find_config_in_user_dir)
         .or_else(|| {
-            prompt_create_default_config().expect("Failed to handle configuration file creation")
+            match prompt_create_default_config() {
+                Ok(Some(path)) => Some(path),
+                Ok(None) => {
+                    eprintln!("Configuration file not found. Exiting.");
+                    None
+                },
+                Err(e) => {
+                    eprintln!("Error creating default configuration: {}", e);
+                    None
+                }
+            }
         });
 
     if let Some(path) = config_path {
-        let config =
-            read_config(path.to_str().unwrap()).expect("Failed to read configuration file");
+        let config_path_str = path.to_str().unwrap_or_else(|| {
+            eprintln!("Invalid path.");
+            std::process::exit(1);
+        });
 
-        let results = Arc::new(Mutex::new(Vec::new()));
-        let mut handles = Vec::new();
-        let default_ssh_option = String::new();
-        let default_user = String::new();
+        let config = match read_config(config_path_str) {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                eprintln!("Failed to read configuration file: {}", e);
+                std::process::exit(1);
+            }
+        };     
+
+    let results = Arc::new(Mutex::new(Vec::new()));
+    let mut handles = Vec::new();
+    let default_ssh_option = String::new();
+    let default_user = String::new();
 
         for server in &config.servers {
             let ssh_options = config
