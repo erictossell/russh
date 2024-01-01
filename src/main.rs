@@ -8,9 +8,10 @@ use std::thread;
 use std::sync::{Arc, Mutex};
 use std::fs::File;
 use std::io::{Write, BufWriter};
-use std::path::Path;
 use std::path::PathBuf;
 use thiserror::Error;
+use clap::{App, Arg};
+use std::io;
 
 #[derive(Error, Debug)]
 enum AppError {
@@ -45,15 +46,54 @@ fn read_config(file_path: &str) -> Result<Config> {
     Ok(config)
 }
 
-fn get_config_path(args: &[String]) -> PathBuf {
-    args.get(1)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            dirs::config_dir()
-                .expect("Failed to find config directory")
-                .join("russh/russh.json")
-        })
+fn find_config_in_cwd() -> Option<PathBuf> {
+    let cwd = env::current_dir().expect("Failed to get current working directory");
+    let config_path = cwd.join("russh.json");
+    if config_path.exists() {
+        Some(config_path)
+    } else {
+        None
+    }
 }
+
+fn find_config_in_user_dir() -> Option<PathBuf> {
+    dirs::config_dir().and_then(|path| {
+        let russh_dir = path.join("russh");
+        if russh_dir.is_dir() {
+            std::fs::read_dir(russh_dir).ok()?.find_map(|entry| {
+                let entry = entry.ok()?;
+                let path = entry.path();
+                if path.is_file() && path.file_name()?.to_str()?.starts_with("russh.json") {
+                    Some(path)
+                } else {
+                    None
+                }
+            })
+        } else {
+            None
+        }
+    })
+}
+
+fn prompt_create_default_config() -> Result<Option<PathBuf>> {
+    let default_path = dirs::config_dir()
+        .ok_or(AppError::FileError(std::io::Error::new(std::io::ErrorKind::NotFound, "Config directory not found")))?
+        .join("russh/russh.json");
+
+    println!("Configuration file not found. Do you want to create a default one at {:?}? [Y/n]", default_path);
+    let mut response = String::new();
+    io::stdin().read_line(&mut response)
+        .map_err(|e| AppError::FileError(e))?;  // Changed this line
+
+    if response.trim().to_lowercase().starts_with('y') {
+        create_default_config(default_path.to_str().ok_or(AppError::FileError(std::io::Error::new(std::io::ErrorKind::InvalidData, "Failed to convert path to string")))?)?;
+        Ok(Some(default_path))
+    } else {
+        Ok(None)
+    }
+}
+
+
 
 fn create_default_config(file_path: &str) -> Result<()> {
  
@@ -104,78 +144,63 @@ fn run_ssh_command(server: &str, user: &str, command: &str, ssh_options: &str) -
     }
 }
 
-
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    let config_path = get_config_path(&args);
-    
-    // Check if the config file exists, otherwise create a default one
-    if !config_path.exists() {
-        create_default_config(config_path.to_str().unwrap())
-            .expect("Failed to create default config");
-        println!("Default configuration file created at {:?}. Please edit it and run the program again.", config_path);
-        return;
-    }
-    let _config = read_config(config_path.to_str().unwrap()).expect("Failed to read config");
+    let matches = App::new("ruSSH")
+        .version("0.1.0")
+        .author("Your Name")
+        .about("Executes SSH commands on multiple servers")
+        .arg(Arg::with_name("commands")
+             .help("Commands to execute on the servers")
+             .required(true)
+             .multiple(true))
+        .get_matches();
 
-    let args: Vec<String> = env::args().collect();
-    let config_path = args.get(1).expect("Usage: program [config_path] [command1] [command2] ...");
-    let commands = args.iter().skip(2).cloned().collect::<Vec<_>>();
+    let commands: Vec<String> = matches.values_of("commands").unwrap().map(|s| s.to_string()).collect();
 
-    if !Path::new(config_path).exists() {
-        create_default_config(config_path).expect("Failed to create default config");
-        println!("Default configuration file created at {}. Please edit it and run the program again.", config_path);
-        return;
-    }
+    let config_path = find_config_in_cwd()
+        .or_else(find_config_in_user_dir)
+        .or_else(|| prompt_create_default_config().expect("Failed to handle configuration file creation"));
 
-    let config = read_config(config_path).expect("Failed to read config");
+    if let Some(path) = config_path {
 
-    // To fix the temporary value issue, define empty defaults outside the loop
-    let default_ssh_option = "".to_string();
-    let default_user = "".to_string();
+        let config = read_config(path.to_str().unwrap()).expect("Failed to read configuration file");
 
     let results = Arc::new(Mutex::new(Vec::new()));
-
     let mut handles = Vec::new();
+    let default_ssh_option = String::new();
+    let default_user = String::new();
 
-    for server in config.servers.iter() {
-    let ssh_options = config.ssh_options.get(server).unwrap_or(&default_ssh_option);
-    let user = config.users.get(server).unwrap_or(&default_user);
+    for server in &config.servers {
+        let ssh_options = config.ssh_options.get(server).unwrap_or(&default_ssh_option);
+        let user = config.users.get(server).unwrap_or(&default_user);
 
-    for command in &commands {
-        let server_clone = server.clone();
-        let ssh_options_clone = ssh_options.clone();
-        let user_clone = user.clone();
-        let command_clone = command.clone();
+        for command in &commands {
+            let server_clone = server.clone();
+            let ssh_options_clone = ssh_options.clone();
+            let user_clone = user.clone();
+            let command_clone = command.clone();
+            let results_clone = Arc::clone(&results);
 
-        // Clone the Arc for each thread
-        let results_clone = Arc::clone(&results);
+            let handle = thread::spawn(move || {
+                let result = run_ssh_command(&server_clone, &user_clone, &command_clone, &ssh_options_clone);
+                let mut results = results_clone.lock().unwrap();
+                results.push(result);
+            });
 
-        let handle = thread::spawn(move || {
-            let result = run_ssh_command(&server_clone, &user_clone, &command_clone, &ssh_options_clone);
-            let mut results = results_clone.lock().unwrap();
-            results.push(result);
-        });
-
-        handles.push(handle);
+            handles.push(handle);
+        }
     }
-}
 
     for handle in handles {
         handle.join().unwrap();
     }
 
     let mut results = results.lock().unwrap();
+    results.sort_by(|a, b| a.server.cmp(&b.server)); 
 
-    // Sort the results if needed
-    // For example, sort by server name
-    results.sort_by(|a, b| a.server.cmp(&b.server));
-
-    // Setup log file
     let log_file = File::create("output.log").expect("Unable to create log file");
     let mut log_writer = BufWriter::new(log_file);
 
-    // Print and log results
     for result in results.iter() {
         if let Some(error) = &result.error {
             println!("Error from {}: {} (Duration: {:.2}s)", result.server, error, result.duration);
@@ -185,7 +210,13 @@ fn main() {
             writeln!(log_writer, "Output from {}:\n{}(Duration: {:.2}s)", result.server, result.output, result.duration).expect("Unable to write to log file");
         }
     }
+    } else {
 
     println!("Execution completed on all servers.");
-    // Continue with sorting and printing results
 }
+
+}
+
+
+
+
