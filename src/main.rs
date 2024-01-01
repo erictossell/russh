@@ -1,17 +1,17 @@
-use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
-use std::fs;
-use std::process::Command;
-use std::time::Instant;
-use std::env;
-use std::thread;
-use std::sync::{Arc, Mutex};
-use std::fs::File;
-use std::io::{Write, BufWriter};
-use std::path::PathBuf;
-use thiserror::Error;
 use clap::{App, Arg};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::env;
+use std::fs;
+use std::fs::File;
 use std::io;
+use std::io::{BufWriter, Write};
+use std::path::PathBuf;
+use std::process::Command;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Instant;
+use thiserror::Error;
 
 #[derive(Error, Debug)]
 enum AppError {
@@ -77,26 +77,35 @@ fn find_config_in_user_dir() -> Option<PathBuf> {
 
 fn prompt_create_default_config() -> Result<Option<PathBuf>> {
     let default_path = dirs::config_dir()
-        .ok_or(AppError::FileError(std::io::Error::new(std::io::ErrorKind::NotFound, "Config directory not found")))?
+        .ok_or(AppError::FileError(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Config directory not found",
+        )))?
         .join("russh/russh.json");
 
-    println!("Configuration file not found. Do you want to create a default one at {:?}? [Y/n]", default_path);
+    println!(
+        "Configuration file not found. Do you want to create a default one at {:?}? [Y/n]",
+        default_path
+    );
     let mut response = String::new();
-    io::stdin().read_line(&mut response)
-        .map_err(|e| AppError::FileError(e))?;  // Changed this line
+    io::stdin()
+        .read_line(&mut response)
+        .map_err(|e| AppError::FileError(e))?; // Changed this line
 
     if response.trim().to_lowercase().starts_with('y') {
-        create_default_config(default_path.to_str().ok_or(AppError::FileError(std::io::Error::new(std::io::ErrorKind::InvalidData, "Failed to convert path to string")))?)?;
+        create_default_config(default_path.to_str().ok_or(AppError::FileError(
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Failed to convert path to string",
+            ),
+        ))?)?;
         Ok(Some(default_path))
     } else {
         Ok(None)
     }
 }
 
-
-
 fn create_default_config(file_path: &str) -> Result<()> {
- 
     let path = PathBuf::from(file_path);
 
     // Create directories if they do not exist
@@ -118,7 +127,12 @@ fn run_ssh_command(server: &str, user: &str, command: &str, ssh_options: &str) -
     let start = Instant::now();
     let output = if cfg!(target_os = "windows") {
         Command::new("powershell")
-            .args(&["-ExecutionPolicy", "Bypass", "-Command", &format!("ssh {} {}@{} \"{}\"", ssh_options, user, server, command)])
+            .args(&[
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                &format!("ssh {} {}@{} \"{}\"", ssh_options, user, server, command),
+            ])
             .output()
     } else {
         Command::new("ssh")
@@ -132,7 +146,11 @@ fn run_ssh_command(server: &str, user: &str, command: &str, ssh_options: &str) -
         Ok(output) => ServerResult {
             server: server.to_string(),
             output: String::from_utf8_lossy(&output.stdout).to_string(),
-            error: output.status.success().then(|| None).unwrap_or(Some(String::from_utf8_lossy(&output.stderr).to_string())),
+            error: output
+                .status
+                .success()
+                .then(|| None)
+                .unwrap_or(Some(String::from_utf8_lossy(&output.stderr).to_string())),
             duration,
         },
         Err(e) => ServerResult {
@@ -149,74 +167,100 @@ fn main() {
         .version("0.1.0")
         .author("Your Name")
         .about("Executes SSH commands on multiple servers")
-        .arg(Arg::with_name("commands")
-             .help("Commands to execute on the servers")
-             .required(true)
-             .multiple(true))
+        .arg(
+            Arg::with_name("commands")
+                .help("Commands to execute on the servers")
+                .required(true)
+                .multiple(true),
+        )
         .get_matches();
 
-    let commands: Vec<String> = matches.values_of("commands").unwrap().map(|s| s.to_string()).collect();
+    let commands: Vec<String> = matches
+        .values_of("commands")
+        .unwrap()
+        .map(|s| s.to_string())
+        .collect();
 
     let config_path = find_config_in_cwd()
         .or_else(find_config_in_user_dir)
-        .or_else(|| prompt_create_default_config().expect("Failed to handle configuration file creation"));
+        .or_else(|| {
+            prompt_create_default_config().expect("Failed to handle configuration file creation")
+        });
 
     if let Some(path) = config_path {
+        let config =
+            read_config(path.to_str().unwrap()).expect("Failed to read configuration file");
 
-        let config = read_config(path.to_str().unwrap()).expect("Failed to read configuration file");
+        let results = Arc::new(Mutex::new(Vec::new()));
+        let mut handles = Vec::new();
+        let default_ssh_option = String::new();
+        let default_user = String::new();
 
-    let results = Arc::new(Mutex::new(Vec::new()));
-    let mut handles = Vec::new();
-    let default_ssh_option = String::new();
-    let default_user = String::new();
+        for server in &config.servers {
+            let ssh_options = config
+                .ssh_options
+                .get(server)
+                .unwrap_or(&default_ssh_option);
+            let user = config.users.get(server).unwrap_or(&default_user);
 
-    for server in &config.servers {
-        let ssh_options = config.ssh_options.get(server).unwrap_or(&default_ssh_option);
-        let user = config.users.get(server).unwrap_or(&default_user);
+            for command in &commands {
+                let server_clone = server.clone();
+                let ssh_options_clone = ssh_options.clone();
+                let user_clone = user.clone();
+                let command_clone = command.clone();
+                let results_clone = Arc::clone(&results);
 
-        for command in &commands {
-            let server_clone = server.clone();
-            let ssh_options_clone = ssh_options.clone();
-            let user_clone = user.clone();
-            let command_clone = command.clone();
-            let results_clone = Arc::clone(&results);
+                let handle = thread::spawn(move || {
+                    let result = run_ssh_command(
+                        &server_clone,
+                        &user_clone,
+                        &command_clone,
+                        &ssh_options_clone,
+                    );
+                    let mut results = results_clone.lock().unwrap();
+                    results.push(result);
+                });
 
-            let handle = thread::spawn(move || {
-                let result = run_ssh_command(&server_clone, &user_clone, &command_clone, &ssh_options_clone);
-                let mut results = results_clone.lock().unwrap();
-                results.push(result);
-            });
-
-            handles.push(handle);
+                handles.push(handle);
+            }
         }
-    }
 
-    for handle in handles {
-        handle.join().unwrap();
-    }
-
-    let mut results = results.lock().unwrap();
-    results.sort_by(|a, b| a.server.cmp(&b.server)); 
-
-    let log_file = File::create("output.log").expect("Unable to create log file");
-    let mut log_writer = BufWriter::new(log_file);
-
-    for result in results.iter() {
-        if let Some(error) = &result.error {
-            println!("Error from {}: {} (Duration: {:.2}s)", result.server, error, result.duration);
-            writeln!(log_writer, "Error from {}: {} (Duration: {:.2}s)", result.server, error, result.duration).expect("Unable to write to log file");
-        } else {
-            println!("Output from {}:\n{}(Duration: {:.2}s)", result.server, result.output, result.duration);
-            writeln!(log_writer, "Output from {}:\n{}(Duration: {:.2}s)", result.server, result.output, result.duration).expect("Unable to write to log file");
+        for handle in handles {
+            handle.join().unwrap();
         }
-    }
+
+        let mut results = results.lock().unwrap();
+        results.sort_by(|a, b| a.server.cmp(&b.server));
+
+        let log_file = File::create("output.log").expect("Unable to create log file");
+        let mut log_writer = BufWriter::new(log_file);
+
+        for result in results.iter() {
+            if let Some(error) = &result.error {
+                println!(
+                    "Error from {}: {} (Duration: {:.2}s)",
+                    result.server, error, result.duration
+                );
+                writeln!(
+                    log_writer,
+                    "Error from {}: {} (Duration: {:.2}s)",
+                    result.server, error, result.duration
+                )
+                .expect("Unable to write to log file");
+            } else {
+                println!(
+                    "Output from {}:\n{}(Duration: {:.2}s)",
+                    result.server, result.output, result.duration
+                );
+                writeln!(
+                    log_writer,
+                    "Output from {}:\n{}(Duration: {:.2}s)",
+                    result.server, result.output, result.duration
+                )
+                .expect("Unable to write to log file");
+            }
+        }
     } else {
-
-    println!("Execution completed on all servers.");
+        println!("Execution completed on all servers.");
+    }
 }
-
-}
-
-
-
-
