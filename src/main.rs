@@ -8,6 +8,7 @@ use crate::ssh::run_ssh_command;
 use ansi_term::Color::{Blue, Green, Red, Yellow};
 use argh::FromArgs;
 
+use indicatif::{ProgressBar, ProgressStyle};
 use std::fs::File;
 use std::io::{self, BufWriter, IsTerminal, Write}; // Use std::io::Write and others
 use std::path::PathBuf;
@@ -90,6 +91,16 @@ fn main() {
 
         let results = Arc::new(Mutex::new(Vec::new()));
         let mut handles = Vec::new();
+        // Create a progress bar for tracking overall progress
+        let overall_progress =
+            ProgressBar::new(commands.len() as u64 * config.servers.len() as u64);
+
+        // Configure the progress bar style
+        overall_progress.set_style(
+            ProgressStyle::default_bar()
+                .template("[{bar:40}] {percent}% ({pos}/{len})")
+                .expect("Failed to set progress bar style"),
+        );
 
         for server in &config.servers {
             let server_arc = Arc::new(server.clone());
@@ -103,6 +114,12 @@ fn main() {
             let user_arc = Arc::new(config.users.get(server).unwrap_or(&String::new()).clone());
 
             for command in &commands {
+                // Create a progress bar for tracking individual command progress
+                let progress = ProgressBar::new_spinner();
+                let server_label = format!("Server: {}", server);
+                let command_label = format!("Command: {}", command);
+                let message = format!("{} - {}", server_label, command_label);
+                progress.set_message(message);
                 let command_arc = Arc::new(command.clone());
                 let results_arc = Arc::clone(&results);
 
@@ -110,21 +127,28 @@ fn main() {
                 let ssh_options_ref = Arc::clone(&ssh_options_arc);
                 let user_ref = Arc::clone(&user_arc);
                 let command_ref = Arc::clone(&command_arc);
+                let progress_ref = progress.clone();
 
                 let handle = thread::spawn(move || {
                     let result =
                         run_ssh_command(&server_ref, &user_ref, &command_ref, &ssh_options_ref);
                     let mut results = results_arc.lock().unwrap();
                     results.push(result);
+
+                    // Finish the progress bar
+                    progress_ref.finish_and_clear();
                 });
 
                 handles.push(handle);
+                overall_progress.inc(1);
             }
         }
 
         for handle in handles {
             handle.join().unwrap();
         }
+
+        overall_progress.finish();
 
         let mut results = results.lock().unwrap();
         results.sort_by(|a, b| a.server.cmp(&b.server));
