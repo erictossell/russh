@@ -2,14 +2,14 @@ mod config;
 mod ssh;
 use crate::config::{find_config_in_cwd, find_config_in_user_dir, prompt_create_default_config, read_config};
 use crate::ssh::run_ssh_command;
-
-use clap::{App, Arg};
 use std::fs::File;
 use std::io;
 use std::io::{BufWriter, IsTerminal, Write};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use thiserror::Error;
+use structopt::StructOpt;
+
 
 #[derive(Error, Debug)]
 enum AppError {
@@ -18,6 +18,14 @@ enum AppError {
     #[error("file error: {0}")]
     FileError(#[from] std::io::Error),
     // Add other error types as needed
+}
+
+#[derive(StructOpt, Debug)]
+#[structopt(name = "ruSSH")]
+struct Cli {
+    /// Commands to execute on the servers
+    #[structopt(name = "COMMAND", required = true)]
+    commands: Vec<String>,
 }
 
 type Result<T> = std::result::Result<T, AppError>;
@@ -29,24 +37,9 @@ fn main() {
         std::process::exit(1);
     }
 
-    let matches = App::new("ruSSH")
-        .version("0.1.0")
-        .author("Eric Tossell")
-        .about("Executes SSH commands on multiple servers")
-        .arg(
-            Arg::with_name("commands")
-                .help("Commands to execute on the servers")
-                .required(true)
-                .multiple(true),
-        )
-        .get_matches();
-
-        let commands: Vec<String> = matches
-        .values_of("commands")
-        .unwrap()
-        .map(|s| s.to_string())
-        .collect();
-
+    let cli = Cli::from_args();
+    let commands = cli.commands;
+    
     let config_path = find_config_in_cwd()
         .or_else(find_config_in_user_dir)
         .or_else(|| {
