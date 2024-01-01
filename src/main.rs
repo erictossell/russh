@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use thiserror::Error;
 use argh::FromArgs;
+use std::path::PathBuf;
 
 
 #[derive(Error, Debug)]
@@ -27,8 +28,13 @@ enum AppError {
 struct Cli {
     /// specify the commands that should be executed on the remote servers.
     /// These are the actual SSH commands that will be run on each server.
-    #[argh(option)]
+    #[argh(positional)]
     commands: Vec<String>,
+
+    /// optional: specify the relative path to the russh.json file.
+    /// If not provided, a default path or other logic will be used.
+    #[argh(option, short = 'c')]
+    config_file: Option<String>,
 }
 
 type Result<T> = std::result::Result<T, AppError>;
@@ -43,21 +49,29 @@ fn main() {
     let cli: Cli = argh::from_env(); 
     let commands = cli.commands;
     
-    let config_path = find_config_in_cwd()
-        .or_else(find_config_in_user_dir)
-        .or_else(|| {
-            match prompt_create_default_config() {
+    let config_path = if let Some(config_path) = cli.config_file {
+        let path = PathBuf::from(&config_path);
+        if path.exists() {
+            Some(path)
+        } else {
+            eprintln!("Specified configuration file not found: {}", config_path);
+            None
+        }
+    } else {
+        find_config_in_cwd()
+            .or_else(find_config_in_user_dir)
+            .or_else(|| match prompt_create_default_config() {
                 Ok(Some(path)) => Some(path),
                 Ok(None) => {
                     eprintln!("Configuration file not found. Exiting.");
                     None
-                },
+                }
                 Err(e) => {
                     eprintln!("Error creating default configuration: {}", e);
                     None
                 }
-            }
-        });
+            })
+    };
 
     if let Some(path) = config_path {
         let config_path_str = path.to_str().unwrap_or_else(|| {
