@@ -37,7 +37,6 @@ struct Config {
     // Add other configuration fields here
 }
 
-
 type Result<T> = std::result::Result<T, AppError>;
 
 fn read_config(file_path: &str) -> Result<Config> {
@@ -52,7 +51,7 @@ fn get_config_path(args: &[String]) -> PathBuf {
         .unwrap_or_else(|| {
             dirs::config_dir()
                 .expect("Failed to find config directory")
-                .join("russh/configuration.json")
+                .join("russh/russh.json")
         })
 }
 
