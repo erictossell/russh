@@ -41,7 +41,7 @@ fn main() {
         )
         .get_matches();
 
-    let commands: Vec<String> = matches
+        let commands: Vec<String> = matches
         .values_of("commands")
         .unwrap()
         .map(|s| s.to_string())
@@ -70,47 +70,45 @@ fn main() {
         });
 
         let config = match read_config(config_path_str) {
-            Ok(cfg) => cfg,
+            Ok(cfg) => Arc::new(cfg),
             Err(e) => {
                 eprintln!("Failed to read configuration file: {}", e);
                 std::process::exit(1);
             }
-        };     
+        };
 
-    let results = Arc::new(Mutex::new(Vec::new()));
-    let mut handles = Vec::new();
-    let default_ssh_option = String::new();
-    let default_user = String::new();
+        let results = Arc::new(Mutex::new(Vec::new()));
+        let mut handles = Vec::new();
 
         for server in &config.servers {
-            let ssh_options = config
-                .ssh_options
-                .get(server)
-                .unwrap_or(&default_ssh_option);
-            let user = config.users.get(server).unwrap_or(&default_user);
+            let server_arc = Arc::new(server.clone());
+            let ssh_options_arc = Arc::new(config.ssh_options.get(server).unwrap_or(&String::new()).clone());
+            let user_arc = Arc::new(config.users.get(server).unwrap_or(&String::new()).clone());
 
             for command in &commands {
-                let server_clone = server.clone();
-                let ssh_options_clone = ssh_options.clone();
-                let user_clone = user.clone();
-                let command_clone = command.clone();
-                let results_clone = Arc::clone(&results);
+                let command_arc = Arc::new(command.clone());
+                let results_arc = Arc::clone(&results);
+
+                let server_ref = Arc::clone(&server_arc);
+                let ssh_options_ref = Arc::clone(&ssh_options_arc);
+                let user_ref = Arc::clone(&user_arc);
+                let command_ref = Arc::clone(&command_arc);
 
                 let handle = thread::spawn(move || {
                     let result = run_ssh_command(
-                        &server_clone,
-                        &user_clone,
-                        &command_clone,
-                        &ssh_options_clone,
+                        &server_ref,
+                        &user_ref,
+                        &command_ref,
+                        &ssh_options_ref,
                     );
-                    let mut results = results_clone.lock().unwrap();
+                    let mut results = results_arc.lock().unwrap();
                     results.push(result);
                 });
 
                 handles.push(handle);
             }
         }
-
+        
         for handle in handles {
             handle.join().unwrap();
         }
