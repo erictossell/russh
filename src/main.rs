@@ -154,7 +154,7 @@ fn run_ssh_command(server: &str, user: &str, command: &str, ssh_options: &str) -
 fn main() {
     let matches = App::new("ruSSH")
         .version("0.1.0")
-        .author("Your Name")
+        .author("Eric Tossell")
         .about("Executes SSH commands on multiple servers")
         .arg(
             Arg::with_name("commands")
