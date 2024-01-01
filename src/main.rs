@@ -125,20 +125,10 @@ fn create_default_config(file_path: &str) -> Result<()> {
 
 fn run_ssh_command(server: &str, user: &str, command: &str, ssh_options: &str) -> ServerResult {
     let start = Instant::now();
-    let output = if cfg!(target_os = "windows") {
-        Command::new("powershell")
-            .args(&[
-                "-ExecutionPolicy",
-                "Bypass",
-                "-Command",
-                &format!("ssh {} {}@{} \"{}\"", ssh_options, user, server, command),
-            ])
-            .output()
-    } else {
-        Command::new("ssh")
+    let output = Command::new("ssh")
             .args(&[ssh_options, &format!("{}@{}", user, server), command])
             .output()
-    };
+    
 
     let duration = start.elapsed().as_secs_f64();
 
