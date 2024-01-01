@@ -127,9 +127,8 @@ fn run_ssh_command(server: &str, user: &str, command: &str, ssh_options: &str) -
     let start = Instant::now();
     let output = Command::new("ssh")
             .args(&[ssh_options, &format!("{}@{}", user, server), command])
-            .output()
+            .output();
     
-
     let duration = start.elapsed().as_secs_f64();
 
     match output {
