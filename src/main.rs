@@ -135,10 +135,12 @@ fn main() {
         for result in results.iter() {
             let formatted_duration = format!("{:.2}s", result.duration);
 
-            let duration_color = match formatted_duration.len() {
-                0..=4 => Green,
-                5..=6 => Yellow,
-                _ => Red,
+            let duration_color = if result.duration <= 3.0 {
+                Green
+            } else if result.duration <= 10.0 {
+                Yellow
+            } else {
+                Red
             };
 
             println!(
