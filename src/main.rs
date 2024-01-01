@@ -5,10 +5,11 @@ use crate::config::{
 };
 use crate::ssh::run_ssh_command;
 
+use ansi_term::Color::{Blue, Green, Red, Yellow};
 use argh::FromArgs;
+
 use std::fs::File;
-use std::io;
-use std::io::{BufWriter, IsTerminal, Write};
+use std::io::{self, BufWriter, IsTerminal, Write}; // Use std::io::Write and others
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -132,31 +133,31 @@ fn main() {
         let mut log_writer = BufWriter::new(log_file);
 
         for result in results.iter() {
-            if let Some(error) = &result.error {
-                println!(
-                    "Error from {}: {} (Duration: {:.2}s)",
-                    result.server, error, result.duration
-                );
-                writeln!(
-                    log_writer,
-                    "Error from {}: {} (Duration: {:.2}s)",
-                    result.server, error, result.duration
-                )
-                .expect("Unable to write to log file");
-            } else {
-                println!(
-                    "Output from {}:\n{}(Duration: {:.2}s)",
-                    result.server, result.output, result.duration
-                );
-                writeln!(
-                    log_writer,
-                    "Output from {}:\n{}(Duration: {:.2}s)",
-                    result.server, result.output, result.duration
-                )
-                .expect("Unable to write to log file");
-            }
+            let formatted_duration = format!("{:.2}s", result.duration);
+
+            let duration_color = match formatted_duration.len() {
+                0..=4 => Green,
+                5..=6 => Yellow,
+                _ => Red,
+            };
+
+            println!(
+                "{} - {}: ",
+                Blue.paint(&result.server),
+                duration_color.paint(&formatted_duration)
+            );
+
+            println!("{}", &result.output);
+
+            // Writing to log file (without color)
+            writeln!(
+                log_writer,
+                "{} - {}:\n{}",
+                result.server, formatted_duration, result.output
+            )
+            .expect("Unable to write to log file");
         }
     } else {
-        println!("Execution completed on all servers.");
+        println!("{}", Blue.paint("Execution completed on all servers."));
     }
 }
