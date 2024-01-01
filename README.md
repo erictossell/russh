@@ -4,13 +4,15 @@ A multi-host SSH client written in Rust.
 
 ### Usage
 
-```rust
-russh "command1" "command2" "command3"
+```bash
+russh "command1" "command2" "command3" -c </path/to/russh.json>
 ```
+
+`-c` - Pass a relative path to a `russh.json` value into the program.
 
 ### NixOS Flakes Installation
 
-In flake.nix inputs add:
+In `flake.nix` inputs add:
 
 ```nix
 inputs = {
@@ -18,7 +20,7 @@ inputs = {
 }; 
 ```
 
-In flake.nix modules add:
+In `flake.nix` modules add:
 
 ```nix
 modules = [
@@ -33,7 +35,7 @@ modules = [
 
 or
 
-Imported as a module.nix:
+Imported as a `module.nix`:
 
 ```nix
 { pkgs, russh, ... }: 
