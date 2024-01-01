@@ -1,17 +1,18 @@
 mod config;
 mod ssh;
-use crate::config::{find_config_in_cwd, find_config_in_user_dir, prompt_create_default_config, read_config};
+use crate::config::{
+    find_config_in_cwd, find_config_in_user_dir, prompt_create_default_config, read_config,
+};
 use crate::ssh::run_ssh_command;
 
+use argh::FromArgs;
 use std::fs::File;
 use std::io;
 use std::io::{BufWriter, IsTerminal, Write};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use thiserror::Error;
-use argh::FromArgs;
-use std::path::PathBuf;
-
 
 #[derive(Error, Debug)]
 enum AppError {
@@ -40,15 +41,14 @@ struct Cli {
 type Result<T> = std::result::Result<T, AppError>;
 
 fn main() {
-
     if !io::stdout().is_terminal() {
         writeln!(io::stderr(), "This application must be run in a terminal.").unwrap();
         std::process::exit(1);
     }
 
-    let cli: Cli = argh::from_env(); 
+    let cli: Cli = argh::from_env();
     let commands = cli.commands;
-    
+
     let config_path = if let Some(config_path) = cli.config_file {
         let path = PathBuf::from(&config_path);
         if path.exists() {
@@ -92,7 +92,13 @@ fn main() {
 
         for server in &config.servers {
             let server_arc = Arc::new(server.clone());
-            let ssh_options_arc = Arc::new(config.ssh_options.get(server).unwrap_or(&String::new()).clone());
+            let ssh_options_arc = Arc::new(
+                config
+                    .ssh_options
+                    .get(server)
+                    .unwrap_or(&String::new())
+                    .clone(),
+            );
             let user_arc = Arc::new(config.users.get(server).unwrap_or(&String::new()).clone());
 
             for command in &commands {
@@ -105,12 +111,8 @@ fn main() {
                 let command_ref = Arc::clone(&command_arc);
 
                 let handle = thread::spawn(move || {
-                    let result = run_ssh_command(
-                        &server_ref,
-                        &user_ref,
-                        &command_ref,
-                        &ssh_options_ref,
-                    );
+                    let result =
+                        run_ssh_command(&server_ref, &user_ref, &command_ref, &ssh_options_ref);
                     let mut results = results_arc.lock().unwrap();
                     results.push(result);
                 });
@@ -118,7 +120,7 @@ fn main() {
                 handles.push(handle);
             }
         }
-        
+
         for handle in handles {
             handle.join().unwrap();
         }
