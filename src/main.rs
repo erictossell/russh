@@ -2,13 +2,14 @@ mod config;
 mod ssh;
 use crate::config::{find_config_in_cwd, find_config_in_user_dir, prompt_create_default_config, read_config};
 use crate::ssh::run_ssh_command;
+
 use std::fs::File;
 use std::io;
 use std::io::{BufWriter, IsTerminal, Write};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use thiserror::Error;
-use structopt::StructOpt;
+use argh::FromArgs;
 
 
 #[derive(Error, Debug)]
@@ -20,11 +21,13 @@ enum AppError {
     // Add other error types as needed
 }
 
-#[derive(StructOpt, Debug)]
-#[structopt(name = "ruSSH")]
+/// executes SSH commands on multiple servers.
+/// This is the main configuration for the command line interface.
+#[derive(FromArgs, PartialEq, Debug)]
 struct Cli {
-    /// Commands to execute on the servers
-    #[structopt(name = "COMMAND", required = true)]
+    /// specify the commands that should be executed on the remote servers.
+    /// These are the actual SSH commands that will be run on each server.
+    #[argh(option)]
     commands: Vec<String>,
 }
 
@@ -37,7 +40,7 @@ fn main() {
         std::process::exit(1);
     }
 
-    let cli = Cli::from_args();
+    let cli: Cli = argh::from_env(); 
     let commands = cli.commands;
     
     let config_path = find_config_in_cwd()
