@@ -4,10 +4,10 @@ use std::time::Instant;
 
 #[derive(Serialize, Deserialize)]
 pub struct ServerResult {
-    server: String,
-    output: String,
-    error: Option<String>,
-    duration: f64,
+    pub server: String,
+    pub output: String,
+    pub error: Option<String>,
+    pub duration: f64,
 }
 
 pub fn run_ssh_command(server: &str, user: &str, command: &str, ssh_options: &str) -> ServerResult {

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json;
+use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::io;
@@ -10,9 +11,9 @@ use crate::{AppError, Result};
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
-    servers: Vec<String>,
-    ssh_options: HashMap<String, String>,
-    users: HashMap<String, String>,
+    pub servers: Vec<String>,
+    pub ssh_options: HashMap<String, String>,
+    pub users: HashMap<String, String>,
     // Add other configuration fields here
 }
 
