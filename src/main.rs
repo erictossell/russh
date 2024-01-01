@@ -5,7 +5,7 @@ use std::env;
 use std::fs;
 use std::fs::File;
 use std::io;
-use std::io::{BufWriter, Write, IsTerminal};
+use std::io::{BufWriter, IsTerminal, Write};
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
@@ -126,9 +126,9 @@ fn create_default_config(file_path: &str) -> Result<()> {
 fn run_ssh_command(server: &str, user: &str, command: &str, ssh_options: &str) -> ServerResult {
     let start = Instant::now();
     let output = Command::new("ssh")
-            .args(&[ssh_options, &format!("{}@{}", user, server), command])
-            .output();
-    
+        .args(&[ssh_options, &format!("{}@{}", user, server), command])
+        .output();
+
     let duration = start.elapsed().as_secs_f64();
 
     match output {
@@ -152,7 +152,6 @@ fn run_ssh_command(server: &str, user: &str, command: &str, ssh_options: &str) -
 }
 
 fn main() {
-
     if !io::stdout().is_terminal() {
         writeln!(io::stderr(), "This application must be run in a terminal.").unwrap();
         std::process::exit(1);
