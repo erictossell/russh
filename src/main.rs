@@ -5,7 +5,7 @@ use std::env;
 use std::fs;
 use std::fs::File;
 use std::io;
-use std::io::{BufWriter, Write};
+use std::io::{BufWriter, Write, IsTerminal};
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
@@ -152,6 +152,11 @@ fn run_ssh_command(server: &str, user: &str, command: &str, ssh_options: &str) -
 }
 
 fn main() {
+
+    if !io::stdout().is_terminal() {
+        writeln!(io::stderr(), "This application must be run in a terminal.").unwrap();
+        std::process::exit(1);
+    }
     let matches = App::new("ruSSH")
         .version("0.1.0")
         .author("Eric Tossell")
