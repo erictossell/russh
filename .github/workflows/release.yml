@@ -7,13 +7,19 @@ on:
 
 jobs:
   build-and-release:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
     - uses: actions/checkout@v2
     - name: Install Rust
       run: rustup default stable
     - name: Build Release
       run: cargo build --release
+    - name: Rename Binary for Windows
+      if: matrix.os == 'windows-latest'
+      run: mv target/release/russh target/release/russh.exe
     - name: Create Release
       id: create_release
       uses: actions/create-release@v1
@@ -30,7 +36,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.RUSSH_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./target/release/russh
-        asset_name: russh
+        asset_path: ${{ github.workspace }}/target/release/russh${{ matrix.os == 'windows-latest' && '.exe' || '' }}
+        asset_name: russh-${{ matrix.os }}${{ matrix.os == 'windows-latest' && '.exe' || '' }}
         asset_content_type: application/octet-stream
 
