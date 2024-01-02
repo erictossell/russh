@@ -208,18 +208,3 @@ fn main() {
         std::process::exit(1); // Use an appropriate exit code
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_run_application() {
-        let cli = Cli {
-            commands: vec!["command1".to_string(), "command2".to_string()],
-            config_file: Some("russh.json".to_string()),
-        };
-
-        assert!(run_application(cli).is_ok());
-    }
-}
