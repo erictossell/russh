@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use serde_json;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
@@ -54,7 +53,7 @@ pub fn find_config_in_user_dir() -> Option<PathBuf> {
 
 pub fn prompt_create_default_config() -> Result<Option<PathBuf>> {
     let default_path = dirs::config_dir()
-        .ok_or(AppError::FileError(std::io::Error::new(
+        .ok_or(AppError::File(std::io::Error::new(
             std::io::ErrorKind::NotFound,
             "Config directory not found",
         )))?
@@ -67,10 +66,10 @@ pub fn prompt_create_default_config() -> Result<Option<PathBuf>> {
     let mut response = String::new();
     io::stdin()
         .read_line(&mut response)
-        .map_err(|e| AppError::FileError(e))?; // Changed this line
+        .map_err(AppError::File)?;
 
     if response.trim().to_lowercase().starts_with('y') {
-        create_default_config(default_path.to_str().ok_or(AppError::FileError(
+        create_default_config(default_path.to_str().ok_or(AppError::File(
             std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "Failed to convert path to string",
@@ -146,13 +145,5 @@ mod config_tests {
 
         // Clean up
         fs::remove_file(config_path).expect("Failed to remove temp config file");
-    }
-
-    #[test]
-    fn test_find_config_in_user_dir() {
-        // This test depends on the user's environment and might need adjustments
-        // to work correctly in your specific setup.
-        // It's generally more challenging to test user directory configurations
-        // due to the need to manipulate the user's file system.
     }
 }

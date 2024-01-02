@@ -18,11 +18,11 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 enum AppError {
     #[error("configuration error: {0}")]
-    ConfigError(#[from] serde_json::Error),
+    Config(#[from] serde_json::Error),
     #[error("file error: {0}")]
-    FileError(#[from] std::io::Error),
+    File(#[from] std::io::Error),
     #[error("generic error: {0}")]
-    GenericError(String),
+    Generic(String),
     // Add other error types as needed
 }
 
@@ -56,7 +56,7 @@ fn run_application(cli: Cli) -> Result<()> {
             path
         } else {
             eprintln!("Specified configuration file not found: {}", config_path);
-            return Err(AppError::GenericError(
+            return Err(AppError::Generic(
                 "Configuration file not found".to_string(),
             ));
         }
@@ -76,7 +76,7 @@ fn run_application(cli: Cli) -> Result<()> {
             }) {
             Some(path) => path,
             None => {
-                return Err(AppError::GenericError(
+                return Err(AppError::Generic(
                     "Configuration path not found".to_string(),
                 ))
             }
@@ -99,7 +99,7 @@ fn run_application(cli: Cli) -> Result<()> {
 
     let results = Arc::new(Mutex::new(Vec::new()));
     let mut handles = Vec::new();
-  
+
     for server in &config.servers {
         let server_arc = Arc::new(server.clone());
         let ssh_options_arc = Arc::new(
@@ -119,7 +119,7 @@ fn run_application(cli: Cli) -> Result<()> {
             let ssh_options_ref = Arc::clone(&ssh_options_arc);
             let user_ref = Arc::clone(&user_arc);
             let command_ref = Arc::clone(&command_arc);
-            
+
             let handle = thread::spawn(move || {
                 let result =
                     run_ssh_command(&server_ref, &user_ref, &command_ref, &ssh_options_ref);
@@ -167,8 +167,6 @@ fn run_application(cli: Cli) -> Result<()> {
             result.server, formatted_duration, result.output
         )
         .expect("Unable to write to log file");
-
-        
     }
     println!("{}", Blue.paint("Execution completed on all servers."));
     Ok(())
@@ -176,7 +174,7 @@ fn run_application(cli: Cli) -> Result<()> {
 
 fn main() {
     if !io::stdout().is_terminal() {
-        writeln!(io::stderr(), "This application must be run in a terminal.").unwrap();
+        eprint!("This application must be run in a terminal.");
         std::process::exit(1);
     }
 

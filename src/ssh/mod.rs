@@ -17,16 +17,15 @@ pub fn run_ssh_command(server: &str, user: &str, command: &str, ssh_options: &st
         .output();
 
     let duration = start.elapsed().as_secs_f64();
-
     match output {
         Ok(output) => ServerResult {
             server: server.to_string(),
             output: String::from_utf8_lossy(&output.stdout).to_string(),
-            error: output
-                .status
-                .success()
-                .then(|| None)
-                .unwrap_or(Some(String::from_utf8_lossy(&output.stderr).to_string())),
+            error: if output.status.success() {
+                None
+            } else {
+                Some(String::from_utf8_lossy(&output.stderr).to_string())
+            },
             duration,
         },
         Err(e) => ServerResult {
