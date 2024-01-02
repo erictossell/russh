@@ -17,12 +17,14 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 enum AppError {
-    #[error("configuration error: {0}")]
-    Config(#[from] serde_json::Error),
     #[error("file error: {0}")]
     File(#[from] std::io::Error),
     #[error("generic error: {0}")]
     Generic(String),
+    #[error("toml error: {0}")]
+    TomlDeserializationError(toml::de::Error),
+    #[error("toml error: {0}")]
+    TomlSerializationError(toml::ser::Error),
     // Add other error types as needed
 }
 
