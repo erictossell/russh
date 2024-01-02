@@ -13,10 +13,11 @@ pub struct ServerResult {
 pub fn run_ssh_command(server: &str, user: &str, command: &str, ssh_options: &str) -> ServerResult {
     let start = Instant::now();
     let output = Command::new("ssh")
-        .args(&[ssh_options, &format!("{}@{}", user, server), command])
+        .args([ssh_options, &format!("{}@{}", user, server), command])
         .output();
 
     let duration = start.elapsed().as_secs_f64();
+
     match output {
         Ok(output) => ServerResult {
             server: server.to_string(),
