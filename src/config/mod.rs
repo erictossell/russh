@@ -99,3 +99,60 @@ pub fn create_default_config(file_path: &str) -> Result<()> {
     fs::write(file_path, example_config_bytes)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod config_tests {
+    use super::*;
+    use std::fs;
+    use std::path::Path;
+
+    // Helper function to create a temporary configuration file
+    fn create_temp_config(file_name: &str, content: &str) -> String {
+        let path = Path::new(file_name);
+        fs::write(path, content).expect("Failed to write temp config file");
+        path.to_str().unwrap().to_string()
+    }
+
+    #[test]
+    fn test_read_config() {
+        let config_content = r#"{
+            "servers": ["test.server.com"],
+            "ssh_options": {"test.server.com": "-p 22"},
+            "users": {"test.server.com": "user"}
+        }"#;
+        let file_path = create_temp_config("test_config.json", config_content);
+
+        let config = read_config(&file_path).expect("Failed to read config");
+        assert_eq!(config.servers, vec!["test.server.com"]);
+        assert_eq!(config.ssh_options["test.server.com"], "-p 22");
+        assert_eq!(config.users["test.server.com"], "user");
+
+        // Clean up
+        fs::remove_file(file_path).expect("Failed to remove temp config file");
+    }
+
+    #[test]
+    fn test_find_config_in_cwd() {
+        let config_content = r#"{
+            "servers": ["192.168.2.195"],
+            "ssh_options": { "192.168.2.195": "-p 2973"},
+            "users": { "192.168.2.195": "eriim" }
+
+        }"#;
+        let _ = create_temp_config("russh.json", config_content);
+
+        let config_path = find_config_in_cwd().expect("Failed to find config in CWD");
+        assert!(config_path.exists());
+
+        // Clean up
+        fs::remove_file(config_path).expect("Failed to remove temp config file");
+    }
+
+    #[test]
+    fn test_find_config_in_user_dir() {
+        // This test depends on the user's environment and might need adjustments
+        // to work correctly in your specific setup.
+        // It's generally more challenging to test user directory configurations
+        // due to the need to manipulate the user's file system.
+    }
+}
