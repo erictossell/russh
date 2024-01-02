@@ -8,7 +8,6 @@ use crate::ssh::run_ssh_command;
 use ansi_term::Color::{Blue, Green, Red, Yellow};
 use argh::FromArgs;
 
-use indicatif::{ProgressBar, ProgressStyle};
 use std::fs::File;
 use std::io::{self, BufWriter, IsTerminal, Write}; // Use std::io::Write and others
 use std::path::PathBuf;
