@@ -30,7 +30,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.RUSSH_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./target/release/rushh
+        asset_path: ./target/release/russh
         asset_name: russh
         asset_content_type: application/octet-stream
 
