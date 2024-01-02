@@ -36,7 +36,9 @@ jobs:
       run: cargo build --release
     - name: Rename Binary for Windows
       if: matrix.os == 'windows-latest'
-      run: mv target/release/russh target/release/russh.exe
+      run: |
+        ls target/release
+        mv target/release/russh target/release/russh.exe
     - name: Upload Release Asset
       uses: actions/upload-release-asset@v1
       env:
