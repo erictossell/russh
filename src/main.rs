@@ -50,7 +50,6 @@ fn parse_cli_args() -> Cli {
 }
 
 fn run_application(cli: Cli) -> Result<()> {
-    
     let commands = cli.commands;
 
     let config_path = if let Some(config_path) = cli.config_file {
@@ -102,7 +101,7 @@ fn run_application(cli: Cli) -> Result<()> {
 
     let results = Arc::new(Mutex::new(Vec::new()));
     let mut handles = Vec::new();
-    
+
     let mut all_success = true;
     let mut any_success = false;
     for server in &config.servers {
@@ -143,15 +142,23 @@ fn run_application(cli: Cli) -> Result<()> {
     let mut results = results.lock().unwrap();
     results.sort_by(|a, b| a.server.cmp(&b.server));
 
-    let log_file = File::create("output.log").expect("Unable to create log file");
+    let mut log_path = dirs::config_dir()
+        .ok_or_else(|| AppError::Generic("Unable to find the config directory".to_string()))?;
+    log_path.push("ruSSH");
+    std::fs::create_dir_all(&log_path).map_err(|e| AppError::File(e))?;
+    log_path.push("ruSSH.log");
+
+    // Create or open the log file
+    let log_file = File::create(log_path).map_err(|e| AppError::File(e))?;
+
     let mut log_writer = BufWriter::new(log_file);
 
     for result in results.iter() {
         if result.success {
-        any_success = true;
-    } else {
-        all_success = false;
-    }
+            any_success = true;
+        } else {
+            all_success = false;
+        }
         let formatted_duration = format!("{:.2}s", result.duration);
 
         let duration_color = if result.duration <= 3.0 {
@@ -177,17 +184,20 @@ fn run_application(cli: Cli) -> Result<()> {
             result.server, formatted_duration, result.output
         )
         .expect("Unable to write to log file");
-
-
     }
     if all_success {
-        println!("{}", Blue.paint("Execution completed successfully on all servers."));
+        println!(
+            "{}",
+            Blue.paint("Execution completed successfully on all servers.")
+        );
     } else if any_success {
-        println!("{}", Yellow.paint("Execution completed with errors on some servers."));
+        println!(
+            "{}",
+            Yellow.paint("Execution completed with errors on some servers.")
+        );
     } else {
         println!("{}", Red.paint("Execution failed on all servers."));
     }
-
 
     Ok(())
 }
@@ -197,13 +207,16 @@ fn main() {
         eprint!("This application must be run in a terminal.");
         std::process::exit(1);
     }
-    
+
     let cli = parse_cli_args();
     println!("{}", Blue.paint("ruSSH - Multi-Host SSH Client"));
     println!("-----------------------------");
     println!("{}", Green.paint("Author: Eric Tossell"));
-    println!("{}", Red.paint("GitHub: https://github.com/erictossell/russh"));
-    println!("Description: \"ruSSH - Your Gateway to Efficient Multi-Host Management\"");
+    println!(
+        "{}",
+        Red.paint("GitHub: https://github.com/erictossell/russh")
+    );
+
     if let Err(e) = run_application(cli) {
         eprintln!("Application error: {}", e);
         std::process::exit(1); // Use an appropriate exit code

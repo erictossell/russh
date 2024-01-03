@@ -154,8 +154,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "russh"
-version = "0.1.8"
+name = "ruSSH"
+version = "0.1.91"
 dependencies = [
  "ansi_term",
  "argh",
