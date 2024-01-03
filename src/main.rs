@@ -17,12 +17,14 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 enum AppError {
-    #[error("configuration error: {0}")]
-    Config(#[from] serde_json::Error),
     #[error("file error: {0}")]
     File(#[from] std::io::Error),
     #[error("generic error: {0}")]
     Generic(String),
+    #[error("toml error: {0}")]
+    TomlDeserializationError(toml::de::Error),
+    #[error("toml error: {0}")]
+    TomlSerializationError(toml::ser::Error),
     // Add other error types as needed
 }
 
@@ -48,6 +50,7 @@ fn parse_cli_args() -> Cli {
 }
 
 fn run_application(cli: Cli) -> Result<()> {
+    
     let commands = cli.commands;
 
     let config_path = if let Some(config_path) = cli.config_file {
@@ -95,11 +98,13 @@ fn run_application(cli: Cli) -> Result<()> {
         }
     };
 
-    println!("Processing...");
+    println!("Processing commands...");
 
     let results = Arc::new(Mutex::new(Vec::new()));
     let mut handles = Vec::new();
-
+    
+    let mut all_success = true;
+    let mut any_success = false;
     for server in &config.servers {
         let server_arc = Arc::new(server.clone());
         let ssh_options_arc = Arc::new(
@@ -142,6 +147,11 @@ fn run_application(cli: Cli) -> Result<()> {
     let mut log_writer = BufWriter::new(log_file);
 
     for result in results.iter() {
+        if result.success {
+        any_success = true;
+    } else {
+        all_success = false;
+    }
         let formatted_duration = format!("{:.2}s", result.duration);
 
         let duration_color = if result.duration <= 3.0 {
@@ -167,8 +177,18 @@ fn run_application(cli: Cli) -> Result<()> {
             result.server, formatted_duration, result.output
         )
         .expect("Unable to write to log file");
+
+
     }
-    println!("{}", Blue.paint("Execution completed on all servers."));
+    if all_success {
+        println!("{}", Blue.paint("Execution completed successfully on all servers."));
+    } else if any_success {
+        println!("{}", Yellow.paint("Execution completed with errors on some servers."));
+    } else {
+        println!("{}", Red.paint("Execution failed on all servers."));
+    }
+
+
     Ok(())
 }
 
@@ -177,9 +197,13 @@ fn main() {
         eprint!("This application must be run in a terminal.");
         std::process::exit(1);
     }
-
+    
     let cli = parse_cli_args();
-
+    println!("{}", Blue.paint("ruSSH - Multi-Host SSH Client"));
+    println!("-----------------------------");
+    println!("{}", Green.paint("Author: Eric Tossell"));
+    println!("{}", Red.paint("GitHub: https://github.com/erictossell/russh"));
+    println!("Description: \"ruSSH - Your Gateway to Efficient Multi-Host Management\"");
     if let Err(e) = run_application(cli) {
         eprintln!("Application error: {}", e);
         std::process::exit(1); // Use an appropriate exit code

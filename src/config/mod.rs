@@ -8,6 +8,18 @@ use std::path::PathBuf;
 // If you're using a custom Result type or error types from main.rs
 use crate::{AppError, Result};
 
+impl From<toml::de::Error> for AppError {
+    fn from(err: toml::de::Error) -> Self {
+        AppError::TomlDeserializationError(err)
+    }
+}
+
+impl From<toml::ser::Error> for AppError {
+    fn from(err: toml::ser::Error) -> Self {
+        AppError::TomlSerializationError(err)
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     pub servers: Vec<String>,
@@ -18,13 +30,13 @@ pub struct Config {
 
 pub fn read_config(file_path: &str) -> Result<Config> {
     let file = fs::read_to_string(file_path)?;
-    let config: Config = serde_json::from_str(&file)?;
+    let config: Config = toml::from_str(&file)?;
     Ok(config)
 }
 
 pub fn find_config_in_cwd() -> Option<PathBuf> {
     let cwd = env::current_dir().expect("Failed to get current working directory");
-    let config_path = cwd.join("russh.json");
+    let config_path = cwd.join("russh.toml");
     if config_path.exists() {
         Some(config_path)
     } else {
@@ -39,7 +51,7 @@ pub fn find_config_in_user_dir() -> Option<PathBuf> {
             std::fs::read_dir(russh_dir).ok()?.find_map(|entry| {
                 let entry = entry.ok()?;
                 let path = entry.path();
-                if path.is_file() && path.file_name()?.to_str()?.starts_with("russh.json") {
+                if path.is_file() && path.file_name()?.to_str()?.starts_with("russh.toml") {
                     Some(path)
                 } else {
                     None
@@ -57,10 +69,10 @@ pub fn prompt_create_default_config() -> Result<Option<PathBuf>> {
             std::io::ErrorKind::NotFound,
             "Config directory not found",
         )))?
-        .join("russh/russh.json");
+        .join("russh/russh.toml");
 
     println!(
-        "Configuration file not found. Do you want to create a default one at {:?}? [Y/n]",
+        "Configuration file not found. Do you want to create a default user file at {:?}? [Y/n]",
         default_path
     );
     let mut response = String::new();
@@ -83,8 +95,6 @@ pub fn prompt_create_default_config() -> Result<Option<PathBuf>> {
 
 pub fn create_default_config(file_path: &str) -> Result<()> {
     let path = PathBuf::from(file_path);
-
-    // Create directories if they do not exist
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir)?;
     }
@@ -92,9 +102,8 @@ pub fn create_default_config(file_path: &str) -> Result<()> {
         servers: vec!["example.server.com".to_string()],
         ssh_options: HashMap::from([("example.server.com".to_string(), "-p 22".to_string())]),
         users: HashMap::from([("example.server.com".to_string(), "example".to_string())]),
-        // Add other configuration fields here
     };
-    let example_config_bytes = serde_json::to_vec_pretty(&example_config)?;
+    let example_config_bytes = toml::to_string_pretty(&example_config)?;
     fs::write(file_path, example_config_bytes)?;
     Ok(())
 }
@@ -105,7 +114,6 @@ mod config_tests {
     use std::fs;
     use std::path::Path;
 
-    // Helper function to create a temporary configuration file
     fn create_temp_config(file_name: &str, content: &str) -> String {
         let path = Path::new(file_name);
         fs::write(path, content).expect("Failed to write temp config file");
@@ -114,36 +122,31 @@ mod config_tests {
 
     #[test]
     fn test_read_config() {
-        let config_content = r#"{
-            "servers": ["test.server.com"],
-            "ssh_options": {"test.server.com": "-p 22"},
-            "users": {"test.server.com": "user"}
-        }"#;
-        let file_path = create_temp_config("test_config.json", config_content);
-
+        let config_content = r#"
+servers = ["test.server.com"]
+[ssh_options]
+"test.server.com" = "-p 22"
+[users]
+"test.server.com" = "user"
+"#;
+        let file_path = create_temp_config("russh.toml", config_content);
         let config = read_config(&file_path).expect("Failed to read config");
         assert_eq!(config.servers, vec!["test.server.com"]);
         assert_eq!(config.ssh_options["test.server.com"], "-p 22");
         assert_eq!(config.users["test.server.com"], "user");
-
-        // Clean up
-        fs::remove_file(file_path).expect("Failed to remove temp config file");
     }
-
     #[test]
     fn test_find_config_in_cwd() {
-        let config_content = r#"{
-            "servers": ["192.168.2.195"],
-            "ssh_options": { "192.168.2.195": "-p 2973"},
-            "users": { "192.168.2.195": "eriim" }
-
-        }"#;
-        let _ = create_temp_config("russh.json", config_content);
+        let config_content = r#"
+servers = ["test.server.com"]
+[ssh_options]
+"test.server.com" = "-p 22"
+[users]
+"test.server.com" = "user"
+"#;
+        let _ = create_temp_config("russh.toml", config_content);
 
         let config_path = find_config_in_cwd().expect("Failed to find config in CWD");
         assert!(config_path.exists());
-
-        // Clean up
-        fs::remove_file(config_path).expect("Failed to remove temp config file");
     }
 }

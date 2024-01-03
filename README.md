@@ -59,18 +59,13 @@ The first time running the application will ask if you would like to generate a 
 
 #### Example Configuration
 
-```json
-{
-  "servers": ["192.168.2.195", "192.168.2.196", "192.168.2.197"],
-  "ssh_options": {
-    "192.168.2.195": "-p 2973",
-    "192.168.2.196": "-p 2973",
-    "192.168.2.197": "-p 2973"
-  },
-  "users": {
-    "192.168.2.195": "eriim",
-    "192.168.2.196": "eriim",
-    "192.168.2.197": "eriim"
-  }
-}
+```toml
+servers = ["test.server.com"]
+
+[ssh_options]
+"test.server.com" = "-p 22"
+
+[users]
+"test.server.com" = "user"
+
 ```
