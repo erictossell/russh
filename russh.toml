@@ -1,8 +1,6 @@
-servers = ["test.server.com"]
 
+servers = ["test.server.com"]
 [ssh_options]
 "test.server.com" = "-p 22"
-
 [users]
 "test.server.com" = "user"
-

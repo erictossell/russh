@@ -8,6 +8,7 @@ pub struct ServerResult {
     pub output: String,
     pub error: Option<String>,
     pub duration: f64,
+    pub success: bool,
 }
 
 pub fn run_ssh_command(server: &str, user: &str, command: &str, ssh_options: &str) -> ServerResult {
@@ -17,7 +18,7 @@ pub fn run_ssh_command(server: &str, user: &str, command: &str, ssh_options: &st
         .output();
 
     let duration = start.elapsed().as_secs_f64();
-
+    
     match output {
         Ok(output) => ServerResult {
             server: server.to_string(),
@@ -28,12 +29,15 @@ pub fn run_ssh_command(server: &str, user: &str, command: &str, ssh_options: &st
                 Some(String::from_utf8_lossy(&output.stderr).to_string())
             },
             duration,
+            success: output.status.success(),
         },
         Err(e) => ServerResult {
             server: server.to_string(),
             output: String::new(),
             error: Some(e.to_string()),
             duration,
+            success: false,
+            
         },
     }
 }
@@ -117,12 +121,14 @@ mod tests {
                 output: String::from_utf8_lossy(&output.stdout).to_string(),
                 error: None,
                 duration: duration_secs,
+                success: output.status.success(),
             },
             false => ServerResult {
                 server: server.to_string(),
                 output: String::new(),
                 error: Some(String::from_utf8_lossy(&output.stderr).to_string()),
                 duration: duration_secs,
+                success: false,
             },
         }
     }
