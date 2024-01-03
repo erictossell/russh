@@ -53,9 +53,9 @@ Imported as a `module.nix`:
 ```
 
 ### Configuration
-The first time running the application will ask if you would like to generate a `.config/russh/russh.json` if one does not exist.
+The first time running the application will ask if you would like to generate a `.config/russh/russh.toml` if one does not exist.
 
-`russh` will look for a `russh.json` in the `cwd` and if none exists it will default to the `.config/russh` value. 
+`russh` will look for a `russh.toml` in the `cwd` and if none exists it will default to the `.config/russh` value. 
 
 #### Example Configuration
 
