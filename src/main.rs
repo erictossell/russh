@@ -144,9 +144,9 @@ fn run_application(cli: Cli) -> Result<()> {
 
     let mut log_path = dirs::config_dir()
         .ok_or_else(|| AppError::Generic("Unable to find the config directory".to_string()))?;
-    log_path.push("ruSSH");
+    log_path.push("russh");
     std::fs::create_dir_all(&log_path).map_err(|e| AppError::File(e))?;
-    log_path.push("ruSSH.log");
+    log_path.push("russh.log");
 
     // Create or open the log file
     let log_file = File::create(log_path).map_err(|e| AppError::File(e))?;
@@ -209,7 +209,7 @@ fn main() {
     }
 
     let cli = parse_cli_args();
-    println!("{}", Blue.paint("ruSSH - Multi-Host SSH Client"));
+    println!("{}", Blue.paint("russh - Multi-Host SSH Client"));
     println!("-----------------------------");
     println!("{}", Green.paint("Author: Eric Tossell"));
     println!(

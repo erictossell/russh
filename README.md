@@ -1,19 +1,19 @@
-# ruSSH
+# russh
 
 A multi-host SSH client written in Rust.
 
 ### Usage
 
 ```bash
-ruSSH "command1" "command2" "command3"
+russh "command1" "command2" "command3"
 ```
 
 ##### Optional Flags
 
-`-c` - Pass a relative path to a `ruSSH.toml` value into the program.
+`-c` - Pass a relative path to a `russh.toml` value into the program.
 
 ```bash
-ruSSH "command1" "command2" "command3" -c </path/to/ruSSH.toml>
+russh "command1" "command2" "command3" -c </path/to/russh.toml>
 ```
 
 ### NixOS Flakes Installation
@@ -22,7 +22,7 @@ In `flake.nix` inputs add:
 
 ```nix
 inputs = {
-  ruSSH.url = "github:erictossell/russh";
+  russh.url = "github:erictossell/russh";
 }; 
 ```
 
@@ -30,10 +30,10 @@ In `flake.nix` modules add:
 
 ```nix
 modules = [
-  ({ pkgs, ruSSH, ... }: 
+  ({ pkgs, russh, ... }: 
   {
     environment.systemPackages = with pkgs; [
-      ruSSH.packages.${system}.default
+      russh.packages.${system}.default
     ];
   })
 ];
@@ -44,20 +44,20 @@ or
 Imported as a `module.nix`:
 
 ```nix
-{ pkgs, ruSSH, ... }: 
+{ pkgs, russh, ... }: 
 {
   environment.systemPackages = with pkgs; [
-    ruSSH.packages.${system}.default
+    russh.packages.${system}.default
   ];
 }
 ```
 
 ### Configuration
-The first time running the application will ask if you would like to generate a `.config/ruSSH/ruSSH.toml` if one does not exist.
+The first time running the application will ask if you would like to generate a `.config/russh/russh.toml` if one does not exist.
 
-`ruSSH` will look for a `ruSSH.toml` in the `cwd` and if none exists it will default to the `.config/ruSSH` value. 
+`russh` will look for a `russh.toml` in the `cwd` and if none exists it will default to the `.config/russh` value. 
 
-#### Example `ruSSH.toml`
+#### Example `russh.toml`
 
 ```toml
 servers = ["test.server.com"]

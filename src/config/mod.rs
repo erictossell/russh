@@ -36,7 +36,7 @@ pub fn read_config(file_path: &str) -> Result<Config> {
 
 pub fn find_config_in_cwd() -> Option<PathBuf> {
     let cwd = env::current_dir().expect("Failed to get current working directory");
-    let config_path = cwd.join("ruSSH.toml");
+    let config_path = cwd.join("russh.toml");
     if config_path.exists() {
         Some(config_path)
     } else {
@@ -46,12 +46,12 @@ pub fn find_config_in_cwd() -> Option<PathBuf> {
 
 pub fn find_config_in_user_dir() -> Option<PathBuf> {
     dirs::config_dir().and_then(|path| {
-        let russh_dir = path.join("ruSSH");
+        let russh_dir = path.join("russh");
         if russh_dir.is_dir() {
             std::fs::read_dir(russh_dir).ok()?.find_map(|entry| {
                 let entry = entry.ok()?;
                 let path = entry.path();
-                if path.is_file() && path.file_name()?.to_str()?.starts_with("ruSSH.toml") {
+                if path.is_file() && path.file_name()?.to_str()?.starts_with("russh.toml") {
                     Some(path)
                 } else {
                     None
@@ -69,7 +69,7 @@ pub fn prompt_create_default_config() -> Result<Option<PathBuf>> {
             std::io::ErrorKind::NotFound,
             "Config directory not found",
         )))?
-        .join("ruSSH/ruSSH.toml");
+        .join("russh/russh.toml");
 
     println!(
         "Configuration file not found. Do you want to create a default user file at {:?}? [Y/n]",
@@ -129,7 +129,7 @@ mod config_tests {
             [users]
             "test.server.com" = "user"
         "#;
-        let file_path = create_temp_config("ruSSH.toml", config_content);
+        let file_path = create_temp_config("russh.toml", config_content);
         let config = read_config(&file_path).expect("Failed to read config");
         assert_eq!(config.servers, vec!["test.server.com"]);
         assert_eq!(config.ssh_options["test.server.com"], "-p 22");
@@ -144,7 +144,7 @@ servers = ["test.server.com"]
 [users]
 "test.server.com" = "user"
 "#;
-        let _ = create_temp_config("ruSSH.toml", config_content);
+        let _ = create_temp_config("russh.toml", config_content);
 
         let config_path = find_config_in_cwd().expect("Failed to find config in CWD");
         assert!(config_path.exists());
