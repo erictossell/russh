@@ -10,10 +10,10 @@ russh "command1" "command2" "command3"
 
 ##### Optional Flags
 
-`-c` - Pass a relative path to a `russh.json` value into the program.
+`-c` - Pass a relative path to a `russh.toml` value into the program.
 
 ```bash
-russh "command1" "command2" "command3" -c </path/to/russh.json>
+russh "command1" "command2" "command3" -c </path/to/russh.toml>
 ```
 
 ### NixOS Flakes Installation
