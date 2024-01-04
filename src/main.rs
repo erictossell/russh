@@ -145,11 +145,11 @@ fn run_application(cli: Cli) -> Result<()> {
     let mut log_path = dirs::config_dir()
         .ok_or_else(|| AppError::Generic("Unable to find the config directory".to_string()))?;
     log_path.push("russh");
-    std::fs::create_dir_all(&log_path).map_err(|e| AppError::File(e))?;
+    std::fs::create_dir_all(&log_path).map_err(AppError::File)?;
     log_path.push("russh.log");
 
     // Create or open the log file
-    let log_file = File::create(log_path).map_err(|e| AppError::File(e))?;
+    let log_file = File::create(log_path).map_err(AppError::File)?;
 
     let mut log_writer = BufWriter::new(log_file);
 
