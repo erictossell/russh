@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 use std::sync::mpsc::Sender;
+use std::thread;
 use std::time::Instant;
 
 #[derive(Serialize, Deserialize)]
@@ -22,8 +23,18 @@ pub fn run_ssh_command(
 ) {
     let start = Instant::now();
 
+    // Convert to owned String types
+    let server_owned = server.to_string();
+    let user_owned = user.to_string();
+    let command_owned = command.to_string();
+    let ssh_options_owned = ssh_options.to_string();
+
     let mut child = Command::new("ssh")
-        .args([ssh_options, &format!("{}@{}", user, server), command])
+        .args([
+            &ssh_options_owned,
+            &format!("{}@{}", user_owned, server_owned),
+            &command_owned,
+        ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -32,37 +43,52 @@ pub fn run_ssh_command(
     let stdout = BufReader::new(child.stdout.take().expect("Failed to get stdout"));
     let stderr = BufReader::new(child.stderr.take().expect("Failed to get stderr"));
 
-    // Stream stdout
-    for line in stdout.lines() {
-        let line = line.expect("Failed to read line from stdout");
-        tx.send(ServerResult {
-            server: server.to_string(),
-            output: line,
-            error: None,
-            duration: start.elapsed().as_secs_f64(),
-            success: true, // This might be adjusted later
-        })
-        .expect("Failed to send output");
-    }
+    let server_clone_for_stdout = server_owned.clone(); // Clone for stdout thread
+    let tx_stdout = tx.clone();
+    let stdout_thread = thread::spawn(move || {
+        for line in stdout.lines() {
+            let line = line.expect("Failed to read line from stdout");
+            tx_stdout
+                .send(ServerResult {
+                    server: server_clone_for_stdout.clone(),
+                    output: line,
+                    error: None,
+                    duration: start.elapsed().as_secs_f64(),
+                    success: true,
+                })
+                .expect("Failed to send output");
+        }
+    });
 
-    // Check if there is any error output
-    let error_output: Vec<String> = stderr
-        .lines()
-        .map(|line| line.unwrap_or_default())
-        .collect();
+    let server_clone_for_stderr = server_owned.clone(); // Clone for stderr thread
+    let tx_stderr = tx.clone();
+    let stderr_thread = thread::spawn(move || {
+        for line in stderr.lines() {
+            let line = line.expect("Failed to read line from stdout");
+            tx_stderr
+                .send(ServerResult {
+                    server: server_clone_for_stderr.clone(),
+                    output: line,
+                    error: None,
+                    duration: start.elapsed().as_secs_f64(),
+                    success: true,
+                })
+                .expect("Failed to send output");
+        }
+    });
+
+    // Wait for both threads to complete
+    stdout_thread.join().expect("Failed to join stdout thread");
+    stderr_thread.join().expect("Failed to join stderr thread");
 
     // Check command completion status
     let success = child.wait().expect("Failed to wait on child").success();
 
-    // Send final result
+    // Send final result indicating completion
     tx.send(ServerResult {
         server: server.to_string(),
         output: String::new(), // No additional output at this point
-        error: if !error_output.is_empty() {
-            Some(error_output.join("\n"))
-        } else {
-            None
-        },
+        error: None,
         duration: start.elapsed().as_secs_f64(),
         success,
     })

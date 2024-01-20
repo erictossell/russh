@@ -144,7 +144,7 @@ fn run_application(cli: Cli) -> Result<()> {
     }
 
     for handle in handles {
-        handle.join().unwrap();
+        handle.join().expect("Failed to join thread");
     }
 
     //let mut results = results.lock().unwrap();
