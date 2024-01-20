@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
-use std::process::Command;
+use std::io::{BufRead, BufReader};
+use std::process::{Command, Stdio};
+use std::sync::mpsc::Sender;
 use std::time::Instant;
 
 #[derive(Serialize, Deserialize)]
@@ -11,35 +13,60 @@ pub struct ServerResult {
     pub success: bool,
 }
 
-pub fn run_ssh_command(server: &str, user: &str, command: &str, ssh_options: &str) -> ServerResult {
+pub fn run_ssh_command(
+    server: &str,
+    user: &str,
+    command: &str,
+    ssh_options: &str,
+    tx: Sender<ServerResult>,
+) {
     let start = Instant::now();
-    let output = Command::new("ssh")
-        .args([ssh_options, &format!("{}@{}", user, server), command])
-        .output();
 
-    let duration = start.elapsed().as_secs_f64();
-    
-    match output {
-        Ok(output) => ServerResult {
+    let mut child = Command::new("ssh")
+        .args([ssh_options, &format!("{}@{}", user, server), command])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("Failed to start ssh command");
+
+    let stdout = BufReader::new(child.stdout.take().expect("Failed to get stdout"));
+    let stderr = BufReader::new(child.stderr.take().expect("Failed to get stderr"));
+
+    // Stream stdout
+    for line in stdout.lines() {
+        let line = line.expect("Failed to read line from stdout");
+        tx.send(ServerResult {
             server: server.to_string(),
-            output: String::from_utf8_lossy(&output.stdout).to_string(),
-            error: if output.status.success() {
-                None
-            } else {
-                Some(String::from_utf8_lossy(&output.stderr).to_string())
-            },
-            duration,
-            success: output.status.success(),
-        },
-        Err(e) => ServerResult {
-            server: server.to_string(),
-            output: String::new(),
-            error: Some(e.to_string()),
-            duration,
-            success: false,
-            
-        },
+            output: line,
+            error: None,
+            duration: start.elapsed().as_secs_f64(),
+            success: true, // This might be adjusted later
+        })
+        .expect("Failed to send output");
     }
+
+    // Check if there is any error output
+    let error_output: Vec<String> = stderr
+        .lines()
+        .map(|line| line.unwrap_or_default())
+        .collect();
+
+    // Check command completion status
+    let success = child.wait().expect("Failed to wait on child").success();
+
+    // Send final result
+    tx.send(ServerResult {
+        server: server.to_string(),
+        output: String::new(), // No additional output at this point
+        error: if !error_output.is_empty() {
+            Some(error_output.join("\n"))
+        } else {
+            None
+        },
+        duration: start.elapsed().as_secs_f64(),
+        success,
+    })
+    .expect("Failed to send final result");
 }
 
 #[cfg(test)]

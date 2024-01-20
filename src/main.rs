@@ -8,13 +8,14 @@ use crate::ssh::run_ssh_command;
 use ansi_term::Color::{Blue, Green, Red, Yellow};
 use argh::FromArgs;
 
+use crate::ssh::ServerResult;
 use std::fs::File;
 use std::io::{self, BufWriter, IsTerminal, Write}; // Use std::io::Write and others
 use std::path::PathBuf;
+use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use thiserror::Error;
-
 #[derive(Error, Debug)]
 enum AppError {
     #[error("file error: {0}")]
@@ -52,6 +53,10 @@ fn parse_cli_args() -> Cli {
 fn run_application(cli: Cli) -> Result<()> {
     let commands = cli.commands;
 
+    let (tx, rx): (mpsc::Sender<ServerResult>, Receiver<ServerResult>) = mpsc::channel();
+    thread::spawn(move || {
+        display_outputs(rx);
+    });
     let config_path = if let Some(config_path) = cli.config_file {
         let path = PathBuf::from(&config_path);
         if path.exists() {
@@ -98,8 +103,8 @@ fn run_application(cli: Cli) -> Result<()> {
     };
 
     println!("Processing commands...");
-
-    let results = Arc::new(Mutex::new(Vec::new()));
+    let results = Arc::new(Mutex::new(Vec::<ServerResult>::new()));
+    //let results_clone_for_display = Arc::clone(&results);
     let mut handles = Vec::new();
 
     let mut all_success = true;
@@ -117,20 +122,23 @@ fn run_application(cli: Cli) -> Result<()> {
 
         for command in &commands {
             let command_arc = Arc::new(command.clone());
-            let results_arc = Arc::clone(&results);
+            //let results_arc = Arc::clone(&results);
 
             let server_ref = Arc::clone(&server_arc);
             let ssh_options_ref = Arc::clone(&ssh_options_arc);
             let user_ref = Arc::clone(&user_arc);
             let command_ref = Arc::clone(&command_arc);
 
+            let tx_clone = tx.clone();
             let handle = thread::spawn(move || {
-                let result =
-                    run_ssh_command(&server_ref, &user_ref, &command_ref, &ssh_options_ref);
-                let mut results = results_arc.lock().unwrap();
-                results.push(result);
+                run_ssh_command(
+                    &server_ref,
+                    &user_ref,
+                    &command_ref,
+                    &ssh_options_ref,
+                    tx_clone,
+                );
             });
-
             handles.push(handle);
         }
     }
@@ -139,8 +147,9 @@ fn run_application(cli: Cli) -> Result<()> {
         handle.join().unwrap();
     }
 
-    let mut results = results.lock().unwrap();
-    results.sort_by(|a, b| a.server.cmp(&b.server));
+    //let mut results = results.lock().unwrap();
+
+    //results.sort_by(|a, b| a.server.cmp(&b.server));
 
     let mut log_path = dirs::config_dir()
         .ok_or_else(|| AppError::Generic("Unable to find the config directory".to_string()))?;
@@ -152,8 +161,8 @@ fn run_application(cli: Cli) -> Result<()> {
     let log_file = File::create(log_path).map_err(AppError::File)?;
 
     let mut log_writer = BufWriter::new(log_file);
-
-    for result in results.iter() {
+    let results_guard = results.lock().unwrap();
+    for result in results_guard.iter() {
         if result.success {
             any_success = true;
         } else {
@@ -185,6 +194,7 @@ fn run_application(cli: Cli) -> Result<()> {
         )
         .expect("Unable to write to log file");
     }
+
     if all_success {
         println!(
             "{}",
@@ -202,13 +212,24 @@ fn run_application(cli: Cli) -> Result<()> {
     Ok(())
 }
 
+fn display_outputs(rx: Receiver<ServerResult>) {
+    for result in rx {
+        println!("{} - Output: {}", result.server, result.output);
+        std::io::stdout().flush().unwrap();
+
+        // Handle keyboard inputs for scrolling here
+        // ...
+
+        thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
 fn main() {
     if !io::stdout().is_terminal() {
         eprint!("This application must be run in a terminal.");
         std::process::exit(1);
     }
 
-    let cli = parse_cli_args();
     println!("{}", Blue.paint("russh - Multi-Host SSH Client"));
     println!("-----------------------------");
     println!("{}", Green.paint("Author: Eric Tossell"));
@@ -217,6 +238,7 @@ fn main() {
         Red.paint("GitHub: https://github.com/erictossell/russh")
     );
 
+    let cli = parse_cli_args();
     if let Err(e) = run_application(cli) {
         eprintln!("Application error: {}", e);
         std::process::exit(1); // Use an appropriate exit code
