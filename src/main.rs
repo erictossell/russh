@@ -1,19 +1,20 @@
 mod config;
 mod ssh;
+use crate::config::Config;
 use crate::config::{
     find_config_in_cwd, find_config_in_user_dir, prompt_create_default_config, read_config,
 };
 use crate::ssh::run_ssh_command;
 
-use ansi_term::Color::{Blue, Green, Red, Yellow};
+use ansi_term::Color::{Blue, Green, Red};
 use argh::FromArgs;
 
 use crate::ssh::ServerResult;
-use std::fs::File;
-use std::io::{self, BufWriter, IsTerminal, Write}; // Use std::io::Write and others
+
+use std::io::{self, IsTerminal, Write}; // Use std::io::Write and others
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
-use std::sync::{Arc, Mutex};
+
 use std::thread;
 use thiserror::Error;
 #[derive(Error, Debug)]
@@ -50,92 +51,66 @@ fn parse_cli_args() -> Cli {
     argh::from_env()
 }
 
-fn run_application(cli: Cli) -> Result<()> {
-    let commands = cli.commands;
+// Assuming `prompt_create_default_config` returns a Result<Option<PathBuf>, Error>
 
-    let (tx, rx): (mpsc::Sender<ServerResult>, Receiver<ServerResult>) = mpsc::channel();
-    thread::spawn(move || {
-        display_outputs(rx);
-    });
-    let config_path = if let Some(config_path) = cli.config_file {
-        let path = PathBuf::from(&config_path);
-        if path.exists() {
-            path
-        } else {
-            eprintln!("Specified configuration file not found: {}", config_path);
-            return Err(AppError::Generic(
-                "Configuration file not found".to_string(),
-            ));
-        }
-    } else {
-        match find_config_in_cwd()
+fn load_config(config_file: &Option<String>) -> Result<Config> {
+    let config_path = match config_file {
+        Some(path) => PathBuf::from(path),
+        None => find_config_in_cwd()
             .or_else(find_config_in_user_dir)
             .or_else(|| match prompt_create_default_config() {
                 Ok(Some(path)) => Some(path),
-                Ok(None) => {
-                    eprintln!("Configuration file not found. Exiting.");
-                    None
-                }
+                Ok(None) => None, // User chose not to create a config
                 Err(e) => {
-                    eprintln!("Error creating default configuration: {}", e);
+                    eprintln!("Error during configuration creation: {}", e);
                     None
                 }
-            }) {
-            Some(path) => path,
-            None => {
-                return Err(AppError::Generic(
-                    "Configuration path not found".to_string(),
-                ))
-            }
-        }
+            })
+            .ok_or_else(|| AppError::Generic("Configuration file not found".to_string()))?,
     };
 
-    let config_path_str = config_path.to_str().unwrap_or_else(|| {
-        eprintln!("Invalid path.");
-        std::process::exit(1);
-    });
-    let config = match read_config(config_path_str) {
-        Ok(cfg) => Arc::new(cfg),
-        Err(e) => {
-            eprintln!("Failed to read configuration file: {}", e);
-            std::process::exit(1);
-        }
-    };
+    let config_path_str = config_path
+        .to_str()
+        .ok_or_else(|| AppError::Generic("Invalid configuration file path".to_string()))?;
 
-    println!("Processing commands...");
-    let results = Arc::new(Mutex::new(Vec::<ServerResult>::new()));
-    //let results_clone_for_display = Arc::clone(&results);
+    read_config(config_path_str).map_err(|e| {
+        eprintln!("Failed to read configuration file: {}", e);
+        AppError::Generic("Failed to read configuration file".to_string())
+    })
+}
+
+fn run_application(cli: Cli) -> Result<()> {
+    let (tx, rx): (mpsc::Sender<ServerResult>, Receiver<ServerResult>) = mpsc::channel();
     let mut handles = Vec::new();
 
-    let mut all_success = true;
-    let mut any_success = false;
+    // Start a thread for displaying outputs
+    thread::spawn(move || {
+        display_outputs(rx);
+    });
+
+    // Load configuration
+    let config = load_config(&cli.config_file)?;
+
+    println!("Processing commands...");
     for server in &config.servers {
-        let server_arc = Arc::new(server.clone());
-        let ssh_options_arc = Arc::new(
-            config
+        for command in &cli.commands {
+            // Clone the values inside the loop before passing them to the thread
+            let server_clone = server.clone();
+            let user_clone = config.users.get(server).unwrap_or(&String::new()).clone();
+            let ssh_options_clone = config
                 .ssh_options
                 .get(server)
                 .unwrap_or(&String::new())
-                .clone(),
-        );
-        let user_arc = Arc::new(config.users.get(server).unwrap_or(&String::new()).clone());
-
-        for command in &commands {
-            let command_arc = Arc::new(command.clone());
-            //let results_arc = Arc::clone(&results);
-
-            let server_ref = Arc::clone(&server_arc);
-            let ssh_options_ref = Arc::clone(&ssh_options_arc);
-            let user_ref = Arc::clone(&user_arc);
-            let command_ref = Arc::clone(&command_arc);
-
+                .clone();
+            let command_clone = command.clone();
             let tx_clone = tx.clone();
+
             let handle = thread::spawn(move || {
                 run_ssh_command(
-                    &server_ref,
-                    &user_ref,
-                    &command_ref,
-                    &ssh_options_ref,
+                    &server_clone,
+                    &user_clone,
+                    &command_clone,
+                    &ssh_options_clone,
                     tx_clone,
                 );
             });
@@ -143,71 +118,15 @@ fn run_application(cli: Cli) -> Result<()> {
         }
     }
 
+    // Wait for all threads to complete
     for handle in handles {
-        handle.join().expect("Failed to join thread");
-    }
-
-    //let mut results = results.lock().unwrap();
-
-    //results.sort_by(|a, b| a.server.cmp(&b.server));
-
-    let mut log_path = dirs::config_dir()
-        .ok_or_else(|| AppError::Generic("Unable to find the config directory".to_string()))?;
-    log_path.push("russh");
-    std::fs::create_dir_all(&log_path).map_err(AppError::File)?;
-    log_path.push("russh.log");
-
-    // Create or open the log file
-    let log_file = File::create(log_path).map_err(AppError::File)?;
-
-    let mut log_writer = BufWriter::new(log_file);
-    let results_guard = results.lock().unwrap();
-    for result in results_guard.iter() {
-        if result.success {
-            any_success = true;
-        } else {
-            all_success = false;
+        if let Err(e) = handle.join() {
+            eprintln!("Failed to join thread: {:?}", e);
         }
-        let formatted_duration = format!("{:.2}s", result.duration);
-
-        let duration_color = if result.duration <= 3.0 {
-            Green
-        } else if result.duration <= 10.0 {
-            Yellow
-        } else {
-            Red
-        };
-
-        println!(
-            "{} - {}: ",
-            Blue.paint(&result.server),
-            duration_color.paint(&formatted_duration)
-        );
-
-        println!("{}", &result.output);
-
-        // Writing to log file (without color)
-        writeln!(
-            log_writer,
-            "{} - {}:\n{}",
-            result.server, formatted_duration, result.output
-        )
-        .expect("Unable to write to log file");
     }
 
-    if all_success {
-        println!(
-            "{}",
-            Blue.paint("Execution completed successfully on all servers.")
-        );
-    } else if any_success {
-        println!(
-            "{}",
-            Yellow.paint("Execution completed with errors on some servers.")
-        );
-    } else {
-        println!("{}", Red.paint("Execution failed on all servers."));
-    }
+    // Final summary or any other post-processing can be done here
+    println!("Execution completed.");
 
     Ok(())
 }
